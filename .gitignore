@@ -1,0 +1,4 @@
+/built/*.js
+/built/*.map
+/images
+/.vscode
