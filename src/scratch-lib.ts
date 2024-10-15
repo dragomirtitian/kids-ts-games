@@ -108,6 +108,10 @@ abstract class GameElement {
         this.update();
     }
 
+    onClick(cb: () => void) {
+        this.#htmlElement.addEventListener("click", cb);
+    }
+
     constructor(createElement: () => HTMLElement, onUpdate: (target: GameElement) => void, style: Partial<CSSStyleDeclaration>) {
         const element = createElement();
         this.#onUpdate = onUpdate;
@@ -330,7 +334,7 @@ export function showInBottom(...value: any[]) {
     document.getElementById("bottom")!.innerText = value.join("");
 }
 
-export function onKeyDown(cb: (key: string) => void) {
+export function onAnyKeyDown(cb: (key: string) => void) {
     stage.focus();
     window.addEventListener("keydown", e => {
         e.preventDefault();
@@ -340,36 +344,28 @@ export function onKeyDown(cb: (key: string) => void) {
 }
 
 export function onArrowLeft(cb: () => void) {
-    onKeyDown(key => {
-        if(key === "ArrowLeft") {
-            cb();
-        }
-    });
+    onKeyDown("ArrowLeft", cb);
 }
 
 export function onArrowRight(cb: () => void) {
-    onKeyDown(key => {
-        if(key === "ArrowRight") {
+    onKeyDown("ArrowRight", cb);
+}
+
+export function onKeyDown(key: string, cb: () => void) {
+    onAnyKeyDown(k => {
+        console.log(k.toLowerCase() , key.toLowerCase())
+        if(k.toLowerCase() === key.toLowerCase()) {
             cb();
         }
     });
 }
 
-
 export function onArrowUp(cb: () => void) {
-    onKeyDown(key => {
-        if(key === "ArrowUp") {
-            cb();
-        }
-    });
+    onKeyDown("ArrowUp", cb);
 }
 
 export function onArrowDown(cb: () => void) {
-    onKeyDown(key => {
-        if(key === "ArrowDown") {
-            cb();
-        }
-    });
+    onKeyDown("ArrowDown", cb);
 }
 export async function repeatForever(cb: () => Promise<void> | void) {
     while(true) {
