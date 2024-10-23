@@ -1,5 +1,6 @@
 interface GameElementProtected {
     readonly element: HTMLElement;
+    readonly matrix?: boolean[][] | undefined
 }
 abstract class GameElement {
     #x = 0;
@@ -95,6 +96,9 @@ abstract class GameElement {
         this.#y = Math.random() * (stageHeight - rect.height);
         this.update();
     }
+    get width() { return this.#htmlElement.getBoundingClientRect().width; }
+    get height() { return this.#htmlElement.getBoundingClientRect().height; }
+
     moveToRandomXY() {
         this.moveToRandomX();
         this.moveToRandomY();
@@ -112,11 +116,19 @@ abstract class GameElement {
         this.#htmlElement.addEventListener("click", cb);
     }
 
+    onHit(element: GameElement, cb: () => void) {
+        onCollisionBetween(this, element, cb);
+    }
+
     constructor(createElement: () => HTMLElement, onUpdate: (target: GameElement) => void, style: Partial<CSSStyleDeclaration>) {
         const element = createElement();
         this.#onUpdate = onUpdate;
         copyStyle(element.style, style);
         element.style.position = "absolute"
+        // element.style.outlineStyle = "solid"
+        // element.style.outlineColor = "red"
+        // element.style.outlineWidth = "0.1px"
+        
         stage.appendChild(element)
         this.#htmlElement = element;
     }
@@ -125,10 +137,39 @@ abstract class GameElement {
 function isOverlapping(element1: GameElementProtected, element2:  GameElementProtected) {
     const rect1 = element1.element.getBoundingClientRect();
     const rect2 = element2.element.getBoundingClientRect();
-    return !(rect1.right < rect2.left ||
-             rect1.left > rect2.right || 
-             rect1.bottom < rect2.top ||
-             rect1.top > rect2.bottom);
+    if (rect1.right < rect2.left ||
+        rect1.left > rect2.right || 
+        rect1.bottom < rect2.top ||
+        rect1.top > rect2.bottom) {
+        return false;
+    }
+
+    const matrix1 = element1.matrix;
+    const matrix2 = element2.matrix;
+    if(!matrix1 || !matrix2) return true;
+    // Now, check pixel-perfect transparency collision
+    const xOverlapStart = Math.floor(Math.max(rect1.left, rect2.left));
+    const xOverlapEnd = Math.floor(Math.min(rect1.right, rect2.right));
+    const yOverlapStart = Math.floor(Math.max(rect1.top, rect2.top));
+    const yOverlapEnd = Math.floor(Math.min(rect1.bottom, rect2.bottom));
+
+    const x1 = Math.floor(rect1.x);
+    const y1 = Math.floor(rect1.y);
+    const x2 = Math.floor(rect2.x);
+    const y2 = Math.floor(rect2.y);
+
+    for (let x = xOverlapStart; x < xOverlapEnd; x++) {
+        for (let y = yOverlapStart; y < yOverlapEnd; y++) {
+            const img1X = x - x1;
+            const img1Y = y - y1;
+            const img2X = x - x2;
+            const img2Y = y - y2;
+            if (!matrix1[img1Y]?.[img1X] && !matrix2[img2Y]?.[img2X]) {
+                return true; // Non-transparent pixels overlap
+            }
+        }
+    }
+    return false;
 }
 
 function delayNoPause(time: number): Promise<void> {
@@ -184,7 +225,9 @@ async function executeCollisionHandlers(target: GameElement) {
     await delay(100);
     for (let other of collisionListenersForTarget) {
         const isOverlappingNow = isOverlapping(target as any as GameElementProtected, other.target as any as GameElementProtected);
-        if(isOverlappingNow && isOverlappingNow !== other.state.lastResult) {
+        if(isOverlappingNow 
+           && isOverlappingNow !== other.state.lastResult
+        ) {
             other.handler();
         }
         other.state.lastResult = isOverlappingNow;
@@ -225,6 +268,32 @@ class ImageElement extends GameElement {
             element.src = src;
             return element;
         }, onUpdate, style);
+    }
+    #matrix: boolean[][] | undefined
+    protected get matrix() {
+        return (this.#matrix ??=this.#createTransparencyMatrix())
+    }
+    // Create a transparency matrix for the image
+    #createTransparencyMatrix(): boolean[][] {
+        const canvas = document.createElement('canvas');
+        canvas.width = this.width;
+        canvas.height = this.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error("Could not create canvas context");
+
+        ctx.drawImage(this.element as HTMLImageElement, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const transparencyMatrix: boolean[][] = [];
+
+        for (let y = 0; y < canvas.height; y++) {
+            const row: boolean[] = [];
+            for (let x = 0; x < canvas.width; x++) {
+                const alphaIndex = (y * canvas.width + x) * 4 + 3; // Alpha is the fourth value in RGBA
+                row.push(imageData.data[alphaIndex] === 0); // true if transparent
+            }
+            transparencyMatrix.push(row);
+        }
+        return transparencyMatrix;
     }
 }
 
@@ -353,7 +422,6 @@ export function onArrowRight(cb: () => void) {
 
 export function onKeyDown(key: string, cb: () => void) {
     onAnyKeyDown(k => {
-        console.log(k.toLowerCase() , key.toLowerCase())
         if(k.toLowerCase() === key.toLowerCase()) {
             cb();
         }
@@ -372,6 +440,42 @@ export async function repeatForever(cb: () => Promise<void> | void) {
         await cb();
         await delay(50)
     }
+}
+
+interface Timer {
+    isActive: boolean;
+    onActivate(): Promise<void>
+    reset(): Promise<void>;
+}
+export function createTimer(total: number) {
+    let resolveActivation: () => void = undefined!;
+    let activation = new Promise<void>(r => resolveActivation = r);
+    const timer: Timer = {
+        isActive: false,
+        onActivate() {
+            return activation;
+        },
+        reset() {
+            resolveActivation();
+            this.isActive = true;
+            return new Promise(r => setTimeout(() => { 
+                this.isActive = false;
+                activation = new Promise<void>(r => resolveActivation = r);
+                r()
+            }, total ));
+        },
+    }
+    return timer;
+}
+
+export function repeatWhileTimer(timer: Timer, cb: () => Promise<void> | void) {
+    repeatForever(async () => {
+        if(timer.isActive) {
+            await cb();
+        } else {
+            await timer.onActivate();
+        }
+    })
 }
 
 export async function repeatEvery(everyMilliseconds: number, cb: () => Promise<void> | void) {

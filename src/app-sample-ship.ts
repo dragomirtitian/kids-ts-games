@@ -1,4 +1,4 @@
-import { delay, setBackground, createElement, stageWidth, stageHeight, repeatForever, onArrowLeft, onArrowRight, onArrowDown, onArrowUp, showInTop, showMessage, onCollisionBetween, repeatNTimes, createCircle, randomDelay, showInDebug } from "./scratch-lib.js";
+import { delay, setBackground, createElement, stageWidth, stageHeight, repeatForever, onArrowLeft, onArrowRight, onArrowDown, onArrowUp, showInTop, showMessage, onCollisionBetween, repeatNTimes, createCircle, randomDelay, showInDebug, createTimer, repeatWhileTimer } from "./scratch-lib.js";
 
 async function main() {
     await delay(1000);
@@ -68,7 +68,14 @@ async function main() {
     })
     let score = 0;
     let lives = 3;
-    async function showScore() {
+    let keepAlive = createTimer(3000);
+    repeatWhileTimer(keepAlive, async () => {
+        ship.hide();
+        await delay(500);
+        ship.show();
+        await delay(500);
+    })
+    let showScore = async () => {
         if(lives === 0) {
             await showMessage("You lose!");
             lives = 3;
@@ -76,7 +83,7 @@ async function main() {
         showInTop("Score ", score, " Lives:", "♥".repeat(lives))
     }
 
-    async function flashBackGround() {
+    let flashBackGround = async () => {
         await repeatNTimes(3, async () => {
             setBackground("red");
             await delay(100);
@@ -84,16 +91,16 @@ async function main() {
         })
 
     }
-    onCollisionBetween(ship, comet, async () => {
-        lives = lives - 1;
-        await showScore();
-        await flashBackGround();
-    })
-    onCollisionBetween(ship, rock, async () => {
-        lives = lives - 1;
-        await showScore();
-        await flashBackGround();
-    })
+    let onHit = async () => {
+        if(!keepAlive.isActive) {
+            lives = lives - 1;
+            keepAlive.reset();
+            await showScore();
+            await flashBackGround();
+        }
+    }
+    onCollisionBetween(ship, comet, onHit);
+    onCollisionBetween(ship, rock, onHit);
     repeatNTimes(3, () => {
         let gift = createElement("diamond.png", 50);
         gift.moveToRandomXY();
