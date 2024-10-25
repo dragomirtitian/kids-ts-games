@@ -2,10 +2,10 @@ interface GameElementProtected {
     readonly element: HTMLElement;
     readonly matrix?: boolean[][] | undefined
 }
-abstract class GameElement {
+abstract class GameElement<T extends HTMLElement = HTMLElement> {
     #x = 0;
     #y = 0;
-    #htmlElement!: HTMLElement;
+    #htmlElement!: T;
     #rotation = 0;
     #onUpdate: (target: GameElement) => void;
     #isVisible: boolean =  true;
@@ -24,6 +24,12 @@ abstract class GameElement {
     rotateRight(degrees: number) {
         this.#rotation += degrees;
         this.update();
+    }
+    destroy() {
+        stage.removeChild(this.element);
+    }
+    [Symbol.dispose]() {
+        this.destroy()
     }
     protected update() {
         this.#htmlElement.style.display = this.#isVisible ? "block": "none";
@@ -116,18 +122,18 @@ abstract class GameElement {
         this.#htmlElement.addEventListener("click", cb);
     }
 
-    onHit(element: GameElement, cb: () => void) {
+    onHit(element: GameElement, cb: (x: number, y: number) => void) {
         onCollisionBetween(this, element, cb);
     }
 
-    constructor(createElement: () => HTMLElement, onUpdate: (target: GameElement) => void, style: Partial<CSSStyleDeclaration>) {
+    constructor(createElement: () => T, onUpdate: (target: GameElement) => void, style: Partial<CSSStyleDeclaration>) {
         const element = createElement();
         this.#onUpdate = onUpdate;
         copyStyle(element.style, style);
         element.style.position = "absolute"
-        // element.style.outlineStyle = "solid"
-        // element.style.outlineColor = "red"
-        // element.style.outlineWidth = "0.1px"
+        element.style.outlineStyle = "solid"
+        element.style.outlineColor = "red"
+        element.style.outlineWidth = "0.1px"
         
         stage.appendChild(element)
         this.#htmlElement = element;
@@ -141,17 +147,18 @@ function isOverlapping(element1: GameElementProtected, element2:  GameElementPro
         rect1.left > rect2.right || 
         rect1.bottom < rect2.top ||
         rect1.top > rect2.bottom) {
-        return false;
+        return null;
     }
 
     const matrix1 = element1.matrix;
     const matrix2 = element2.matrix;
-    if(!matrix1 || !matrix2) return true;
     // Now, check pixel-perfect transparency collision
     const xOverlapStart = Math.floor(Math.max(rect1.left, rect2.left));
     const xOverlapEnd = Math.floor(Math.min(rect1.right, rect2.right));
     const yOverlapStart = Math.floor(Math.max(rect1.top, rect2.top));
     const yOverlapEnd = Math.floor(Math.min(rect1.bottom, rect2.bottom));
+
+    if(!matrix1 || !matrix2) return [xOverlapStart, yOverlapStart] as const;
 
     const x1 = Math.floor(rect1.x);
     const y1 = Math.floor(rect1.y);
@@ -164,12 +171,14 @@ function isOverlapping(element1: GameElementProtected, element2:  GameElementPro
             const img1Y = y - y1;
             const img2X = x - x2;
             const img2Y = y - y2;
-            if (!matrix1[img1Y]?.[img1X] && !matrix2[img2Y]?.[img2X]) {
-                return true; // Non-transparent pixels overlap
+            const m1 = matrix1[img1Y]?.[img1X];
+            const m2 = matrix2[img2Y]?.[img2X]
+            if (m1 === false && m2 === false) {
+                return [x, y] as const; // Non-transparent pixels overlap
             }
         }
     }
-    return false;
+    return null;
 }
 
 function delayNoPause(time: number): Promise<void> {
@@ -185,7 +194,7 @@ export async function delay(time: number): Promise<void> {
         await delayNoPause(500);
     }
 }
-function addCollisionListener(target: GameElement, other: GameElement, state: { lastResult: boolean }, cb: () => void) {
+function addCollisionListener(target: GameElement, other: GameElement, state: { lastResult: boolean }, cb: (x: number, y: number) => void) {
     let existing = collisionListeners.get(target);
     if(!existing) {
         collisionListeners.set(target, existing = []);
@@ -196,7 +205,7 @@ function addCollisionListener(target: GameElement, other: GameElement, state: { 
         state,
     })
 }
-export function onCollisionBetween(a: GameElement, b: GameElement, cb: () => void) {
+export function onCollisionBetween(a: GameElement, b: GameElement, cb: (x: number, y: number) => void) {
     const state = { lastResult: false };
     addCollisionListener(a, b, state, cb);
     addCollisionListener(b, a, state, cb);
@@ -216,7 +225,7 @@ export let stageWidth = 100;
 
 const collisionListeners = new Map<GameElement, Array<{
     target: GameElement,
-    handler: () => void,
+    handler: (x: number, y: number) => void,
     state: { lastResult: boolean }
 }>>();
 async function executeCollisionHandlers(target: GameElement) {
@@ -226,11 +235,11 @@ async function executeCollisionHandlers(target: GameElement) {
     for (let other of collisionListenersForTarget) {
         const isOverlappingNow = isOverlapping(target as any as GameElementProtected, other.target as any as GameElementProtected);
         if(isOverlappingNow 
-           && isOverlappingNow !== other.state.lastResult
+           && !!isOverlappingNow !== other.state.lastResult
         ) {
-            other.handler();
+            other.handler(...isOverlappingNow);
         }
-        other.state.lastResult = isOverlappingNow;
+        other.state.lastResult = !!isOverlappingNow;
     }
 }
 
@@ -261,7 +270,7 @@ function copyStyle(target: CSSStyleDeclaration, src: Partial<CSSStyleDeclaration
     }
 }
 
-class ImageElement extends GameElement {
+class ImageElement extends GameElement<HTMLImageElement> {
     constructor(onUpdate: (target: GameElement) => void, src: string, style: Partial<CSSStyleDeclaration>){
         super(() => {
             const element = document.createElement("img");
@@ -271,30 +280,32 @@ class ImageElement extends GameElement {
     }
     #matrix: boolean[][] | undefined
     protected get matrix() {
-        return (this.#matrix ??=this.#createTransparencyMatrix())
+        return (this.#matrix ??= createTransparencyMatrix(this.element))
     }
-    // Create a transparency matrix for the image
-    #createTransparencyMatrix(): boolean[][] {
-        const canvas = document.createElement('canvas');
-        canvas.width = this.width;
-        canvas.height = this.height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) throw new Error("Could not create canvas context");
+}
 
-        ctx.drawImage(this.element as HTMLImageElement, 0, 0, canvas.width, canvas.height);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const transparencyMatrix: boolean[][] = [];
+function createTransparencyMatrix(element: HTMLImageElement) {
+    const canvas = document.createElement('canvas');
+    const bound = element.getBoundingClientRect();
+    canvas.width = bound.width;
+    canvas.height = bound.height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) throw new Error("Could not create canvas context");
 
-        for (let y = 0; y < canvas.height; y++) {
-            const row: boolean[] = [];
-            for (let x = 0; x < canvas.width; x++) {
-                const alphaIndex = (y * canvas.width + x) * 4 + 3; // Alpha is the fourth value in RGBA
-                row.push(imageData.data[alphaIndex] === 0); // true if transparent
-            }
-            transparencyMatrix.push(row);
+    ctx.drawImage(element, 0, 0, canvas.width, canvas.height);
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const transparencyMatrix: boolean[][] = [];
+
+    for (let y = 0; y < canvas.height; y++) {
+        const row: boolean[] = [];
+        for (let x = 0; x < canvas.width; x++) {
+            const alphaIndex = (y * canvas.width + x) * 4 + 3; // Alpha is the fourth value in RGBA
+            row.push(imageData.data[alphaIndex] === 0); // true if transparent
         }
-        return transparencyMatrix;
+        transparencyMatrix.push(row);
     }
+    return transparencyMatrix;
 }
 
 class DivElement extends GameElement {
@@ -505,4 +516,334 @@ export function pauseAll() {
 
 export function continueAll(){
     isPause = false;
+}
+/**
+ * Create paths with https://boxy-svg.com/app
+ * @param fileName 
+ * @param totalSteps 
+ * @returns 
+ */
+export function createPath(fileName: string, totalSteps = 100) {
+    return new AnimationPath("./images/" + fileName, totalSteps);
+}
+class AnimationPath {
+    #pathElements: SVGPathElement[] = [];
+    #pathPromise: Promise<void>;
+    #totalSteps: number;
+
+    constructor(fileName: string, totalSteps: number) {
+        this.#pathPromise = this.#loadPaths(fileName);
+        this.#totalSteps = totalSteps;
+    }
+
+    async #loadPaths(fileName: string) {
+        const response = await fetch(fileName);
+        const svgContent = await response.text();
+
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(svgContent, 'image/svg+xml');
+        const elements = Array.from(doc.querySelectorAll('path, ellipse, line, rect, circle')) as SVGGeometryElement[];
+
+
+        if (elements.length === 0) {
+            throw new Error('No paths found in the SVG');
+        }
+        // Convert primitive shapes to paths, and keep normal paths as they are
+        this.#pathElements = elements.map(convertToPath);
+        function convertToPath(el: SVGGeometryElement): SVGPathElement {
+            let pathData = '';
+    
+            switch (el.tagName.toLowerCase()) {
+                case 'path': 
+                    return el as SVGPathElement;
+                case 'ellipse': {
+                    const cx = el.getAttribute('cx') || '0';
+                    const cy = el.getAttribute('cy') || '0';
+                    const rx = el.getAttribute('rx') || '0';
+                    const ry = el.getAttribute('ry') || '0';
+                    pathData = `M${+cx - +rx},${cy} A${rx},${ry} 0 1,0 ${+cx + +rx},${cy} A${rx},${ry} 0 1,0 ${+cx - +rx},${cy}`;
+                    break;
+                }
+                case 'circle': {
+                    const cx = el.getAttribute('cx') || '0';
+                    const cy = el.getAttribute('cy') || '0';
+                    const r = el.getAttribute('r') || '0';
+                    pathData = `M${+cx - +r},${cy} A${r},${r} 0 1,0 ${+cx + +r},${cy} A${r},${r} 0 1,0 ${+cx - +r},${cy}`;
+                    break;
+                }
+                case 'line': {
+                    const x1 = el.getAttribute('x1') || '0';
+                    const y1 = el.getAttribute('y1') || '0';
+                    const x2 = el.getAttribute('x2') || '0';
+                    const y2 = el.getAttribute('y2') || '0';
+                    pathData = `M${x1},${y1} L${x2},${y2}`;
+                    break;
+                }
+                case 'rect': {
+                    const x = el.getAttribute('x') || '0';
+                    const y = el.getAttribute('y') || '0';
+                    const width = el.getAttribute('width') || '0';
+                    const height = el.getAttribute('height') || '0';
+                    pathData = `M${x},${y} H${+x + +width} V${+y + +height} H${x} Z`;
+                    break;
+                }
+            }
+    
+            const pathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            pathElement.setAttribute('d', pathData);
+            return pathElement;
+        }
+    }
+
+    #getTotalLength(): number {
+        return this.#pathElements.reduce((total, path) => total + path.getTotalLength(), 0);
+    }
+
+    #getPathSegments(): { path: SVGPathElement, length: number }[] {
+        return this.#pathElements.map(path => ({
+            path,
+            length: path.getTotalLength(),
+        }));
+    }
+    async moveAlong(
+        moveCallback: (dx: number, dy: number) => Promise<void>
+    ) {
+        await this.#pathPromise;
+
+        const pathSegments = this.#getPathSegments();
+        const totalLength = this.#getTotalLength();
+        
+        let previousPoint: DOMPoint | null = null;  // This will hold the last point from the previous path
+
+        for (const { path, length } of pathSegments) {
+            const stepsForPath = Math.round((length / totalLength) * this.#totalSteps);
+            const stepLength = length / stepsForPath;
+
+            for (let step = 0; step <= stepsForPath; step++) {
+                const currentLength = step * stepLength;
+                const currentPoint = path.getPointAtLength(currentLength);
+
+                if (previousPoint === null) {
+                    // If it's the first point of the first path, no need to calculate dx/dy
+                    previousPoint = currentPoint;
+                }
+
+                // Calculate the relative movement dx and dy
+                const dx = currentPoint.x - previousPoint.x;
+                const dy = currentPoint.y - previousPoint.y;
+
+                // Move by the relative difference
+                await moveCallback(dx, dy);
+
+                // Update the previous point to the current one
+                previousPoint = currentPoint;
+            }
+
+            // After finishing a path, set the next path's first point as the new starting point
+            previousPoint = path.getPointAtLength(0);  // Reset to the starting point of the next path
+        }
+    }
+}
+
+interface SpritePose<T extends string>{ name : T, frames: SpriteFrame[], isReady?:Promise<void> }
+
+interface SpriteFrame {
+    imageUrl: string;
+    width: number;
+    height: number;
+}
+
+
+/**
+ * https://www.gamedevmarket.net
+ * https://craftpix.net/
+ * https://opengameart.org/
+ * https://itch.io/
+ */
+export function createSprite<T extends string>(width: number, ...poses: SpritePose<T>[]): SpriteElement<T> {
+    return new SpriteElement<T>(poses, executeCollisionHandlers, {
+        width: `${width}px`
+    });
+}
+
+const spriteCache = new Map<string, SpritePose<any>>();
+export function fromSingleImage<T extends string>(fileName: `${T}.png`, frameWidth: number, frameHeight: number): SpritePose<T> {
+    const imageUrl = "./images/"+fileName;
+    const image = new Image();
+    image.src = imageUrl;
+    const pose = fileName.split('.')[0];
+    const frames: SpriteFrame[] = [];
+    let result: SpritePose<T> | undefined = spriteCache.get(imageUrl + "|" + pose);
+    if(result === undefined){
+        result =  {
+            name:  pose as T,
+            frames,
+            isReady: doLoad(), 
+        };
+        spriteCache.set(imageUrl + "|" + pose, result)
+    }
+    return result;
+    async function doLoad(): Promise<void> {
+        return new Promise((resolve, reject) => {
+            image.onload = () => {
+                const columns = Math.floor(image.width / frameWidth);
+                const rows = Math.floor(image.height / frameHeight);
+
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d',{
+                    willReadFrequently: true,
+                });
+                if (!ctx) {
+                    reject(new Error("Could not get 2D context"));
+                    return;
+                }
+
+                for (let row = 0; row < rows; row++) {
+                    for (let col = 0; col < columns; col++) {
+                        canvas.width = frameWidth;
+                        canvas.height = frameHeight;
+
+                        ctx.clearRect(0, 0, frameWidth, frameHeight);
+                        ctx.drawImage(image, col * frameWidth, row * frameHeight, frameWidth, frameHeight, 0, 0, frameWidth, frameHeight);
+                        
+                        // Convert canvas to data URL (PNG format) and store it
+                        const frameUrl = canvas.toDataURL('image/png');
+
+                        frames.push({
+                            imageUrl: frameUrl,  // Use the data URL
+                            width: frameWidth,
+                            height: frameHeight,
+                        });
+                    }
+                }
+                delete result!.isReady
+                resolve();
+            };
+            image.onerror = reject;
+        });
+    }
+}
+
+export function fromMultipleImages<T extends string>(fileNameTemplate: string, poseName: T, frames: number): SpritePose<T> {
+    const spriteFrames: SpriteFrame[] = [];
+    let result: SpritePose<T> | undefined = spriteCache.get(fileNameTemplate + "|" + poseName);
+    if(!result) {
+        result = {
+            name: poseName,
+            frames: spriteFrames,
+            isReady: doLoad()
+        };
+        spriteCache.set(fileNameTemplate + "|" + poseName, result);
+    }
+    return result;
+    async function doLoad(): Promise<void> {
+        for (let i = 1; i <= frames; i++) {
+            const frameNumber = i.toString().padStart(2, '0');
+            const imageUrl = "./images/" + fileNameTemplate.replace('NN', frameNumber);
+            const img = new Image();
+            img.src = imageUrl;
+
+            await new Promise<void>((resolve, reject) => {
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d', {
+                        willReadFrequently: true,
+                    })!;
+                    ctx?.drawImage(img, 0, 0);
+
+                    // Convert canvas to data URL (PNG format) and store it
+                    const frameUrl = canvas.toDataURL('image/png');
+
+                    spriteFrames.push({
+                        imageUrl: frameUrl,
+                        width: img.width,
+                        height: img.height,
+                    });
+                    delete result!.isReady;
+                    resolve()
+                };
+                img.onerror = reject;
+            });
+        }
+    }
+}
+
+interface SpritePose<T extends string> { 
+    name: T; 
+    frames: SpriteFrame[];
+    isReady?: Promise<void>;
+}
+
+interface SpriteFrame {
+    imageUrl: string;
+    width: number;
+    height: number;
+    collisionMatrix?: boolean[][]
+}
+
+class SpriteElement<T extends string> extends GameElement<HTMLImageElement> {
+    
+    #poses: Map<T, SpritePose<T>>;
+    #currentPose!: SpritePose<T>;
+    #currentFrameIndex: number = 0;
+
+    constructor(poses: SpritePose<T>[], onUpdate: (target: GameElement) => void, style: Partial<CSSStyleDeclaration>) {
+        super(() => document.createElement("img"), onUpdate, style);
+
+        this.#poses = new Map(poses.map(pose => [pose.name, pose]));
+        this.selectPose(poses[0].name); // Default to the first pose after loading frames
+
+    }
+
+    // Select a new pose to run
+    selectPose(pose: T): void {
+        if (!this.#poses.has(pose)) {
+            console.error(`Pose "${pose}" not found.`);
+            return;
+        }
+        this.#currentPose = this.#poses.get(pose)!;
+        this.#currentFrameIndex = 0;
+        if(this.#currentPose.isReady) {
+            this.#currentPose.isReady.then(() => this.update());
+        }else{
+            this.update();
+        }
+    }
+
+    // Update the current frame image
+    protected update() {
+        super.update()
+        const frame = this.#currentPose.frames[this.#currentFrameIndex];
+        this.element.src = frame?.imageUrl;
+    }
+
+    // Move to the next frame in the current pose
+    nextFrame(): void {
+        this.#currentFrameIndex = (this.#currentFrameIndex + 1) % this.#currentPose.frames.length;
+        this.update();
+    }
+
+    protected get matrix() {
+        const frame = this.#currentPose.frames[this.#currentFrameIndex];
+        if(!frame) return null;
+        return frame.collisionMatrix ??= createTransparencyMatrix(this.element);
+    } 
+    // Run the current pose's sequence for a specified duration (in ms)
+    async run(duration: number, pose?: T): Promise<void> {
+        if(pose) {
+            this.selectPose(pose);
+        }
+        if(this.#currentPose.isReady) {
+            await this.#currentPose.isReady;
+        }
+        const totalFrames = this.#currentPose.frames.length;
+        const frameTime = duration / totalFrames;
+        
+        for (let i = 0; i < totalFrames; i++) {
+            this.nextFrame();
+            await new Promise(resolve => setTimeout(resolve, frameTime));
+        }
+    }
 }
