@@ -131,9 +131,9 @@ abstract class GameElement<T extends HTMLElement = HTMLElement> {
         this.#onUpdate = onUpdate;
         copyStyle(element.style, style);
         element.style.position = "absolute"
-        element.style.outlineStyle = "solid"
-        element.style.outlineColor = "red"
-        element.style.outlineWidth = "0.1px"
+        // element.style.outlineStyle = "solid"
+        // element.style.outlineColor = "red"
+        // element.style.outlineWidth = "0.1px"
         
         stage.appendChild(element)
         this.#htmlElement = element;
