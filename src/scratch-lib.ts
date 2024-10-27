@@ -667,7 +667,7 @@ export function createSprite<T extends string>(width: number, ...poses: SpritePo
 }
 
 const spriteCache = new Map<string, SpritePose<any>>();
-export function fromSingleImage<T extends string>(fileName: `${T}.png`, frameWidth: number, frameHeight: number): SpritePose<T> {
+export function fromSingleImage<T extends string>(fileName: `${T}.png`, framesPerRow: number, framesPerColumn: number): SpritePose<T> {
     const imageUrl = "./images/"+fileName;
     const image = new Image();
     image.src = imageUrl;
@@ -686,8 +686,8 @@ export function fromSingleImage<T extends string>(fileName: `${T}.png`, frameWid
     async function doLoad(): Promise<void> {
         return new Promise((resolve, reject) => {
             image.onload = () => {
-                const columns = Math.floor(image.width / frameWidth);
-                const rows = Math.floor(image.height / frameHeight);
+                const frameWidth = Math.floor(image.width / framesPerRow);
+                const frameHeight = Math.floor(image.height / framesPerColumn);
 
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d',{
@@ -698,8 +698,8 @@ export function fromSingleImage<T extends string>(fileName: `${T}.png`, frameWid
                     return;
                 }
 
-                for (let row = 0; row < rows; row++) {
-                    for (let col = 0; col < columns; col++) {
+                for (let row = 0; row < framesPerRow; row++) {
+                    for (let col = 0; col < framesPerColumn; col++) {
                         canvas.width = frameWidth;
                         canvas.height = frameHeight;
 
@@ -819,8 +819,14 @@ class SpriteElement<T extends string> extends GameElement<HTMLImageElement> {
         this.element.src = frame?.imageUrl;
     }
 
+    resetFrame(): void {
+        this.#currentFrameIndex = 0;
+    }
     // Move to the next frame in the current pose
     nextFrame(): void {
+        if(isNaN(this.#currentFrameIndex)) {
+            this.#currentFrameIndex = 0;
+        }
         this.#currentFrameIndex = (this.#currentFrameIndex + 1) % this.#currentPose.frames.length;
         this.update();
     }
