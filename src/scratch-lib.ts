@@ -1,6 +1,7 @@
 interface GameElementProtected {
     readonly element: HTMLElement;
     readonly matrix?: boolean[][] | undefined
+    readonly isDestroyed: boolean;
 }
 abstract class GameElement<T extends HTMLElement = HTMLElement> {
     #x = 0;
@@ -9,7 +10,9 @@ abstract class GameElement<T extends HTMLElement = HTMLElement> {
     #rotation = 0;
     #onUpdate: (target: GameElement) => void;
     #isVisible: boolean =  true;
+    #isDestroyed: boolean  =false;
     protected get element() { return this.#htmlElement }
+    protected get isDestroyed() { return this.#isDestroyed }
     get x() { return this.#x; }
     get y() { return this.#y; }
     get rotation() { return this.#rotation; }
@@ -26,12 +29,18 @@ abstract class GameElement<T extends HTMLElement = HTMLElement> {
         this.update();
     }
     destroy() {
+        if(this.#isDestroyed) return;
+        this.#isDestroyed = true;
+        removeCollisionListenerFor(this);
         stage.removeChild(this.element);
     }
     [Symbol.dispose]() {
         this.destroy()
     }
     protected update() {
+        if(this.#isDestroyed) {
+            throw new Error("Element was destroyed");
+        }
         this.#htmlElement.style.display = this.#isVisible ? "block": "none";
         this.#htmlElement.style.opacity = this.#isVisible ? "1": "0";
         this.#htmlElement.style.left = `${this.#x}px`;
@@ -194,6 +203,20 @@ export async function delay(time: number): Promise<void> {
         await delayNoPause(500);
     }
 }
+
+function removeCollisionListenerFor(target: GameElement) {
+    const existing = collisionListeners.get(target);
+    existing?.forEach(s => {
+        const targetListeners = collisionListeners.get(s.target);
+        if(!targetListeners) return;
+        while(true) {
+            let index = targetListeners.findIndex(p => p.target === target);
+            if(index === -1) break;
+            targetListeners.splice(index, 1);
+        }
+    })
+    collisionListeners.delete(target);
+}
 function addCollisionListener(target: GameElement, other: GameElement, state: { lastResult: boolean }, cb: (x: number, y: number) => void) {
     let existing = collisionListeners.get(target);
     if(!existing) {
@@ -322,6 +345,21 @@ class DivElement extends GameElement {
         }, style);
         this.#color = style.backgroundColor!;
     }
+    #matrix: boolean[][] | undefined;
+    get matrix() {
+        const { width, height } = this;
+        if(this.#matrix === undefined || this.#matrix.length !== width || this.#matrix[0]?.length !== height) {
+            this.#matrix = [];
+            for(let i = 0; i < width; i++) {
+                let m: boolean[] = [];
+                this.#matrix.push(m)
+                for(let j = 0; j < height; j++) {
+                    m.push(false)
+                }
+            }
+        }
+        return this.#matrix;
+    }
 }
 
 
@@ -414,8 +452,51 @@ export function showInBottom(...value: any[]) {
     document.getElementById("bottom")!.innerText = value.join("");
 }
 
+const pressedKeys = new Set<string>();
+interface HandleEntry {
+    handler: (key: string) => Promise<void> | void
+    lastCall: Promise<void> | void
+}
+const handlers = new Map<string, Array<HandleEntry>>();
+
+async function repeatKeyPresses() {
+    function callHandler(key: string, h: HandleEntry) {
+        // if(h.lastCall) return;
+        h.lastCall = h.handler(key);
+        // if(h.lastCall) {
+        //     h.lastCall.then(() => {
+        //         h.lastCall = undefined;
+        //     });
+        // }
+    }
+    while(pressedKeys.size !== 0) {
+        pressedKeys.forEach(key => {
+            handlers.get(key)?.forEach(h => callHandler(key, h))
+            handlers.get("*")?.forEach(h => callHandler(key, h));
+        })
+        await delay(50);
+    }
+}
+
+window.addEventListener("blur", () => {
+    pressedKeys.clear();
+}) 
+window.addEventListener("keydown", (e) => {
+    if(!pressedKeys.has(e.key.toLowerCase())) {
+        pressedKeys.add(e.key.toLowerCase());
+        if(pressedKeys.size === 1) {
+            repeatKeyPresses();
+        }
+    }
+})
+
+window.addEventListener("keyup", (e) => {
+    pressedKeys.delete(e.key.toLowerCase());
+})
+
 export function onAnyKeyDown(cb: (key: string) => void) {
     stage.focus();
+    
     window.addEventListener("keydown", e => {
         e.preventDefault();
         if(isPause) return;
@@ -432,11 +513,12 @@ export function onArrowRight(cb: () => void) {
 }
 
 export function onKeyDown(key: string, cb: () => void) {
-    onAnyKeyDown(k => {
-        if(k.toLowerCase() === key.toLowerCase()) {
-            cb();
-        }
-    });
+    stage.focus();
+    let h = handlers.get(key.toLowerCase());
+    if(h === undefined) {
+        handlers.set(key.toLowerCase(), h = [])
+    }
+    h.push({ handler: cb, lastCall: undefined} )
 }
 
 export function onArrowUp(cb: () => void) {
@@ -477,6 +559,13 @@ export function createTimer(total: number) {
         },
     }
     return timer;
+}
+
+export async function repeatWhileElementExists(element: GameElement, cb: () => Promise<void> | void) {
+    while(!(element as any as GameElementProtected).isDestroyed) {
+        await cb();
+        await delay(100)
+    }
 }
 
 export function repeatWhileTimer(timer: Timer, cb: () => Promise<void> | void) {
