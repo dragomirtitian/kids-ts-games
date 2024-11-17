@@ -826,13 +826,15 @@ export function fromMultipleImages<T extends string>(fileNameTemplate: string, p
     }
     return result;
     async function doLoad(): Promise<void> {
+        let loadCount =  frames;
+        let framesPromises = []
         for (let i = 1; i <= frames; i++) {
             const frameNumber = i.toString().padStart(2, '0');
             const imageUrl = "./images/" + fileNameTemplate.replace('NN', frameNumber);
             const img = new Image();
             img.src = imageUrl;
 
-            await new Promise<void>((resolve, reject) => {
+            framesPromises.push(new Promise<void>((resolve, reject) => {
                 img.onload = () => {
                     const canvas = document.createElement('canvas');
                     canvas.width = img.width;
@@ -850,12 +852,15 @@ export function fromMultipleImages<T extends string>(fileNameTemplate: string, p
                         width: img.width,
                         height: img.height,
                     });
-                    delete result!.isReady;
+                    
                     resolve()
                 };
                 img.onerror = reject;
-            });
+            }));
         }
+        await Promise.all(framesPromises);
+        delete result!.isReady;
+
     }
 }
 
@@ -905,7 +910,9 @@ class SpriteElement<T extends string> extends GameElement<HTMLImageElement> {
     protected update() {
         super.update()
         const frame = this.#currentPose.frames[this.#currentFrameIndex];
-        this.element.src = frame?.imageUrl;
+        if(frame?.imageUrl) {
+            this.element.src = frame.imageUrl;
+        }
     }
 
     resetFrame(): void {
@@ -916,7 +923,9 @@ class SpriteElement<T extends string> extends GameElement<HTMLImageElement> {
         if(isNaN(this.#currentFrameIndex)) {
             this.#currentFrameIndex = 0;
         }
-        this.#currentFrameIndex = (this.#currentFrameIndex + 1) % this.#currentPose.frames.length;
+        if(this.#currentFrameIndex < this.#currentPose.frames.length) {
+            this.#currentFrameIndex = this.#currentFrameIndex + 1;
+        }
         this.update();
     }
 
@@ -935,9 +944,10 @@ class SpriteElement<T extends string> extends GameElement<HTMLImageElement> {
         }
         const totalFrames = this.#currentPose.frames.length;
         const frameTime = duration / totalFrames;
-        
+        this.#currentFrameIndex = 0;
         for (let i = 0; i < totalFrames; i++) {
             this.nextFrame();
+            console.log(i);
             await new Promise(resolve => setTimeout(resolve, frameTime));
         }
     }
