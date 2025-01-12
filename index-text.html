@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Storybook Adventure</title>
+  <style>
+    /* General Styles */
+    body {
+      font-family: "Cormorant Garamond", serif;
+      line-height: 1.8;
+      background-color: #fefbd8; /* Light parchment */
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background-image: url("https://www.transparenttextures.com/patterns/old-wall.png");
+    }
+
+    #game {
+      max-width: 800px;
+      width: 100%;
+      background: #fff8e1; /* Light parchment */
+      border: 8px solid #8b4513; /* Darker brown border */
+      border-radius: 15px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4), 0 0 40px rgba(139, 69, 19, 0.4); /* Glow-like shadow */
+      padding: 30px;
+    }
+
+    .log {
+      font-family: "Playfair Display", serif;
+      font-size: 22px; /* Larger text for story feel */
+      color: #5a3e36; /* Dark brown text */
+      white-space: pre-line;
+      margin-bottom: 20px;
+    }
+
+    .log p {
+      margin: 15px 0;
+    }
+
+    /* Drop cap style for the first letter of each paragraph */
+    .log p:first-letter {
+      font-size: 48px; /* Make the first letter large */
+      font-weight: bold;
+      color: #8b4513; /* Darker brown */
+      float: left;
+      line-height: 1;
+      margin-right: 8px;
+    }
+
+    button {
+      display: block;
+      font-family: "Playfair Display", serif;
+      font-size: 18px;
+      background: #8b4513; /* Dark brown button */
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      padding: 10px 15px;
+      margin: 10px 0;
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.3s ease, transform 0.2s ease;
+    }
+
+    button:hover {
+      background: #a0522d; /* Lighter brown on hover */
+      transform: scale(1.05); /* Subtle hover effect */
+    }
+
+    h2 {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 36px; /* Larger headers */
+      color: #8b4513; /* Header color */
+      margin-bottom: 15px;
+      text-align: center;
+      text-shadow: 1px 1px 1px #fff; /* Slight glow */
+    }
+
+    /* Background Texture */
+    body::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: url("https://www.transparenttextures.com/patterns/old-wall.png");
+      opacity: 0.4;
+      z-index: -1;
+    }
+  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;700&family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="game">
+    <div id="log" class="log"></div>
+    <div id="question" class="log"></div>
+    <div id="choices" class="log"></div>
+  </div>
+  <script type="module" src="./built/app-text.js"></script>
+</body>
+</html>
