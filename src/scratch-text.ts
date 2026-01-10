@@ -36,7 +36,7 @@ export function addChapterTitle(title: string): void {
 }
 let isEchoOn = true;
 let globalEchoFunction: (text: string) => void = writeParagraph;
-function echo(on: boolean, echoFunction: (text: string) => void = writeParagraph): void {
+export function echo(on: boolean, echoFunction: (text: string) => void = writeParagraph): void {
   isEchoOn = on;
   globalEchoFunction = echoFunction;
 } 
@@ -56,7 +56,8 @@ export function askChoiceQuestion(question: string, ...choices: string[]): Promi
       choicesElement.innerHTML = ""; // Clear buttons
       questionElement.innerHTML = ""; // Clear question
       if(isEchoOn) {
-        globalEchoFunction(`${question} ${choice}`);
+        globalEchoFunction(`${question}`);
+        globalEchoFunction(`${choice}`)
       }
     };
     choicesElement.appendChild(button);
@@ -70,6 +71,26 @@ export function askChoiceQuestion(question: string, ...choices: string[]): Promi
 
 export function randomNumber(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+export function rollDice(message?: string, maxValue: number = 6): Promise<number> {
+  return new Promise((resolve) => {
+    questionElement.innerHTML = message ?? `Roll the dice (1-${maxValue})`;
+    choicesElement.innerHTML = "";
+    
+    const button = document.createElement("button");
+    button.textContent = "🎲 Roll Dice";
+    button.onclick = () => {
+      const result = randomNumber(1, maxValue);
+      choicesElement.innerHTML = ""; // Clear buttons
+      questionElement.innerHTML = "";
+      if (isEchoOn) {
+        globalEchoFunction(`Rolled a ${result}!`);
+      }
+      resolve(result);
+    };
+    choicesElement.appendChild(button);
+  });
 }
 
 export function askNumberQuestion(question: string): Promise<number> {
@@ -111,4 +132,9 @@ export function askNumberQuestion(question: string): Promise<number> {
     choicesElement.appendChild(validaionMessage);
 
   });
+}
+
+export function exit(message: string) {
+  writeParagraph(message);
+  throw new Error("You died");
 }
