@@ -20,16 +20,28 @@ export function write(text: string | number): void {
   if (!logElement.lastElementChild) {
     newParagraph();
   }
-  logElement.lastElementChild!.textContent += " " + text;
+  logElement.lastElementChild!.append(text);
 }
 export function writeParagraph(text: string | number): void {
   write(text);
   newParagraph();
 }
 
+export function writeImage(imageUrl: string): void {
+  if (!logElement.lastElementChild) {
+    newParagraph();
+  }
+  const img = document.createElement("img");
+  img.src = imageUrl;
+  img.style.float = "left";
+  img.style.marginRight = "10px";
+  img.style.maxWidth = "200px";
+  logElement.lastElementChild!.appendChild(img);
+}
+
 // Utility to add a chapter title
-export function addChapterTitle(title: string): void {
-  const h2 = document.createElement("h2");
+export function addChapterTitle(title: string, heading = 1): void {
+  const h2 = document.createElement("h" + heading);
   h2.textContent = title;
   logElement.appendChild(h2);
   newParagraph();
