@@ -20,7 +20,7 @@ export function write(text: string | number): void {
   if (!logElement.lastElementChild) {
     newParagraph();
   }
-  logElement.lastElementChild!.append(text);
+  logElement.lastElementChild!.append(text.replaceAll('\n', ' '));
 }
 export function writeParagraph(text: string | number): void {
   write(text);
@@ -104,7 +104,46 @@ export function rollDice(message?: string, maxValue: number = 6): Promise<number
     choicesElement.appendChild(button);
   });
 }
+export function askTextQuestion(question: string): Promise<string> {
+  return new Promise((resolve) => {
+    questionElement.innerHTML = question;
+    const input = document.createElement("input");
+    input.type = "text";
+    choicesElement.innerHTML = "";
+    choicesElement.appendChild(input);
+    const validaionMessage = document.createElement("p");
+    function submitInput() {
+      const value = input.value;
+      if (value.length > 0) {
+        resolve(value);
+        choicesElement.innerHTML = ""; // Clear buttons
+        if(isEchoOn) {
+          questionElement.innerHTML = "";
+          globalEchoFunction(`${question} ${value}`);
+        }else {
+          questionElement.innerHTML = "";
+        }
+      } else {
+        validaionMessage.innerText = "Please enter a text.";
+      }
 
+    }
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        submitInput();
+      }
+    });
+
+    const button = document.createElement("button");
+    button.textContent = "Submit";
+    button.onclick = () => {
+      submitInput();
+    };
+    choicesElement.appendChild(button);
+    choicesElement.appendChild(validaionMessage);
+
+  });
+}
 export function askNumberQuestion(question: string): Promise<number> {
   return new Promise((resolve) => {
     questionElement.innerHTML = question;
