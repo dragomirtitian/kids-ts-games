@@ -141,6 +141,7 @@ export function askTextQuestion(question: string): Promise<string> {
     };
     choicesElement.appendChild(button);
     choicesElement.appendChild(validaionMessage);
+    input.focus();
 
   });
 }
@@ -181,7 +182,7 @@ export function askNumberQuestion(question: string): Promise<number> {
     };
     choicesElement.appendChild(button);
     choicesElement.appendChild(validaionMessage);
-
+    input.focus();
   });
 }
 
