@@ -1,10 +1,18 @@
 {
     "compilerOptions": {
         "target": "ES2023",
-        "module": "ESNext",
+        "module": "esnext",
         "lib": ["ESNext", "DOM"],
         "strict": true,
         "outDir": "./built",
-        "sourceMap": true
-    }
+        "sourceMap": true,
+        "moduleResolution": "node",
+        "types": ["node"],
+        "esModuleInterop": true,
+    },
+    "include": [
+        "lib",
+        "spell-book",
+        "scripts"
+    ]
 }

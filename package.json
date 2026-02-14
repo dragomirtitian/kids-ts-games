@@ -1,0 +1,31 @@
+{
+  "name": "kids-ts-games",
+  "version": "1.0.0",
+  "description": "",
+  "homepage": "https://github.com/dragomirtitian/kids-ts-games#readme",
+  "bugs": {
+    "url": "https://github.com/dragomirtitian/kids-ts-games/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dragomirtitian/kids-ts-games.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "summon": "npm install",
+    "install-vscode-extension": "code --install-extension ms-vscode.live-server --force",
+    "forge-spell": "node built/scripts/forge-spell.js",
+    "brew": "tsc -w -p ./",
+    "serve": "lite-server"
+  },
+  "dependencies": {
+    "@types/node": "^25.2.3",
+    "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "lite-server": "^2.6.1"
+  }
+}

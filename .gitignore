@@ -1,4 +1,4 @@
-/built/*.js
-/built/*.map
+/built
 /images
 /.vscode
+node_modules
